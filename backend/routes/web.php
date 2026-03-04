@@ -15,7 +15,7 @@ function serveSpa(Request $request)
     if (! file_exists($index)) {
         return response('SPA not built. Run build and copy frontend/dist to public/spa.', 503);
     }
-    return response()->file($index);
+    return response()->file($index, ['Content-Type' => 'text/html; charset=UTF-8']);
 }
 
 Route::get('/', function (Request $request) {
