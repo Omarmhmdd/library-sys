@@ -1,8 +1,10 @@
 <?php
 
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
         ]);
+        // API: return 401 JSON instead of redirecting to missing login route
+        Authenticate::redirectUsing(fn (Request $request) => $request->is('api*') ? null : '/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -6,8 +6,9 @@ interface EmbeddingServiceInterface
 {
     /**
      * @return array<float>
+     * @param string|null $inputType Optional: for Cohere use 'search_document' or 'search_query'
      */
-    public function embed(string $text): array;
+    public function embed(string $text, ?string $inputType = null): array;
 
     /**
      * @param array<string> $texts

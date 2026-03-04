@@ -6,8 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreBookRequest;
 use App\Http\Requests\UpdateBookRequest;
 use App\Http\Resources\BookResource;
+use App\Models\Book;
 use App\Models\User;
+use App\Services\AI\BookEmbeddingService;
+use App\Services\AI\MetadataSuggestionService;
+use App\Services\AI\RagService;
 use App\Services\BookService;
+use App\Services\BorrowalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,7 +23,9 @@ use Laravel\Socialite\Facades\Socialite;
 class ApiController extends Controller
 {
     public function __construct(
-        private readonly BookService $bookService
+        private readonly BookService $bookService,
+        private readonly BorrowalService $borrowalService,
+        private readonly BookEmbeddingService $bookEmbeddingService,
     ) {}
 
     /** JSON response helpers (no trait – methods live here) */
@@ -192,6 +199,7 @@ class ApiController extends Controller
     public function booksStore(StoreBookRequest $request): JsonResponse
     {
         $book = $this->bookService->store($request->validated());
+        $this->upsertBookEmbedding($book);
         return $this->created((new BookResource($book))->toArray($request));
     }
 
@@ -202,6 +210,7 @@ class ApiController extends Controller
             return $this->error('Book not found', 404);
         }
         $book = $this->bookService->update($book, $request->validated());
+        $this->upsertBookEmbedding($book);
         return $this->success((new BookResource($book))->toArray($request));
     }
 
@@ -212,6 +221,135 @@ class ApiController extends Controller
             return $this->error('Book not found', 404);
         }
         $this->bookService->delete($book);
+        $this->bookEmbeddingService->deleteForBook($id);
         return $this->success(null, 'Book deleted');
+    }
+
+    private function upsertBookEmbedding(Book $book): void
+    {
+        if (config('openai.api_key') || config('cohere.api_key')) {
+            try {
+                $this->bookEmbeddingService->upsertForBook($book);
+            } catch (\Throwable) {
+                // ignore embedding failures
+            }
+        }
+    }
+
+    // ---- Borrow / Return ----
+
+    public function borrow(Request $request, int $id): JsonResponse
+    {
+        try {
+            $borrowal = $this->borrowalService->borrow($request->user(), $id);
+            $borrowal->load('book');
+            return $this->created([
+                'borrowal_id' => $borrowal->id,
+                'book' => (new BookResource($borrowal->book))->toArray($request),
+                'borrowed_at' => $borrowal->borrowed_at->toIso8601String(),
+            ], 'Book borrowed');
+        } catch (\InvalidArgumentException $e) {
+            return $this->error($e->getMessage(), 400);
+        }
+    }
+
+    public function returnBook(Request $request, int $id): JsonResponse
+    {
+        try {
+            $borrowal = $this->borrowalService->returnBook($request->user(), $id);
+            $borrowal->load('book');
+            return $this->success([
+                'book' => (new BookResource($borrowal->book))->toArray($request),
+                'returned_at' => $borrowal->returned_at?->toIso8601String(),
+            ], 'Book returned');
+        } catch (\InvalidArgumentException $e) {
+            return $this->error($e->getMessage(), 400);
+        }
+    }
+
+    public function myBorrowals(Request $request): JsonResponse
+    {
+        $perPage = min((int) $request->input('per_page', 15), 50);
+        $paginator = $this->borrowalService->myBorrowals($request->user(), $perPage);
+        $items = [];
+        foreach ($paginator->items() as $borrowal) {
+            $items[] = [
+                'id' => $borrowal->id,
+                'book' => (new BookResource($borrowal->book))->toArray($request),
+                'borrowed_at' => $borrowal->borrowed_at->toIso8601String(),
+                'returned_at' => $borrowal->returned_at?->toIso8601String(),
+                'is_active' => $borrowal->isActive(),
+            ];
+        }
+        return $this->success([
+            'data' => $items,
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ],
+        ]);
+    }
+
+    // ---- AI ----
+
+    public function aiAsk(Request $request): JsonResponse
+    {
+        $question = $request->input('question', '');
+        if (trim($question) === '') {
+            return $this->error('question is required', 422);
+        }
+        if (! config('openai.api_key') && ! config('cohere.api_key')) {
+            return $this->error('AI is not configured (set OPENAI_API_KEY or COHERE_API_KEY).', 503);
+        }
+        try {
+            $answer = app(RagService::class)->ask($question);
+            return $this->success(['answer' => $answer]);
+        } catch (\Throwable $e) {
+            return $this->error('AI request failed: ' . $e->getMessage(), 502);
+        }
+    }
+
+    public function aiSuggestMetadata(Request $request): JsonResponse
+    {
+        $title = $request->input('title', '');
+        $author = $request->input('author', '');
+        if (trim($title) === '' || trim($author) === '') {
+            return $this->error('title and author are required', 422);
+        }
+        if (! config('openai.api_key') && ! config('cohere.api_key')) {
+            return $this->error('AI is not configured (set OPENAI_API_KEY or COHERE_API_KEY).', 503);
+        }
+        try {
+            $suggested = app(MetadataSuggestionService::class)->suggest($title, $author);
+            return $this->success($suggested);
+        } catch (\Throwable $e) {
+            return $this->error('AI request failed: ' . $e->getMessage(), 502);
+        }
+    }
+
+    public function similarBooks(Request $request, int $id): JsonResponse
+    {
+        $book = $this->bookService->find($id);
+        if (! $book) {
+            return $this->error('Book not found', 404);
+        }
+        if (! config('openai.api_key') && ! config('cohere.api_key')) {
+            return $this->error('AI is not configured (set OPENAI_API_KEY or COHERE_API_KEY).', 503);
+        }
+        try {
+            $text = $this->bookEmbeddingService->textForBook($book);
+            $vector = app(\App\Services\AI\Contracts\EmbeddingServiceInterface::class)->embed($text);
+            $ids = $this->bookEmbeddingService->searchSimilar($vector, 5, $id);
+            $books = $ids === [] ? [] : Book::whereIn('id', $ids)->orderByRaw('FIELD(id, ' . implode(',', $ids) . ')')->get();
+            $items = [];
+            foreach ($books as $b) {
+                $items[] = (new BookResource($b))->toArray($request);
+            }
+            return $this->success(['data' => $items]);
+        } catch (\Throwable $e) {
+            return $this->error('Similar books failed: ' . $e->getMessage(), 502);
+        }
     }
 }
