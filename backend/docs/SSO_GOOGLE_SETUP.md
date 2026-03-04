@@ -82,3 +82,38 @@ Restart the backend after changing `.env`.
 - “Sign in with Google” appears on the login page.
 - **Any user** with a Google account can click it, sign in with Google, and be logged into your app.
 - New users are created automatically; existing users are matched by email.
+
+---
+
+# GitHub SSO setup (optional – “Sign in with GitHub”)
+
+To make **Sign in with GitHub** work like Google:
+
+## 1. Create a GitHub OAuth App
+
+- Go to **https://github.com/settings/developers** → **OAuth Apps** → **New OAuth App**.
+- **Application name:** e.g. `Library App`.
+- **Homepage URL:** e.g. `http://localhost:5173` (your frontend or app URL).
+- **Authorization callback URL:** set **exactly** to:
+  - Local: `http://localhost:8000/api/auth/github/callback`
+  - Production: `https://your-api-domain.com/api/auth/github/callback`
+- **Register application**.
+
+## 2. Get Client ID and Secret
+
+- On the app page, copy **Client ID**.
+- Click **Generate a new client secret**, copy the **Client secret** (you won’t see it again).
+
+## 3. Configure backend `.env`
+
+In the **backend** folder, add:
+
+```env
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+GITHUB_REDIRECT_URI=http://localhost:8000/api/auth/github/callback
+```
+
+Use the same `FRONTEND_URL` as for Google so after GitHub login you’re sent back to the SPA.
+
+Restart the backend. “Sign in with GitHub” will then work; if GitHub doesn’t provide an email, the app uses a placeholder so login still works.

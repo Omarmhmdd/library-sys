@@ -43,7 +43,11 @@ Uses the backend via Vite proxy when both run locally.
 - **AI:** Ask the Library (RAG), similar books, metadata suggestion when adding/editing
 - **My borrowals:** List current and past borrowals
 
-## Deploy
+## Deploy and get a live URL
 
-- **Backend:** Deploy Laravel (e.g. Railway, Forge, VPS). Set `APP_URL` and CORS for the frontend origin.
-- **Frontend:** `cd frontend && npm run build`. Serve `dist/` (e.g. Vercel, Netlify, same host). Set `VITE_API_BASE` to the backend URL.
+**To get a URL for live testing (challenge requirement):**
+
+1. See **[DEPLOY_LIVE.md](DEPLOY_LIVE.md)** – deploy backend on **Railway** (or Render) and frontend on **Vercel** in ~15 minutes. You get a live frontend URL to submit.
+2. Repo includes **`vercel.json`** (frontend) and **`backend/Dockerfile`** (API) so you can connect GitHub and deploy with minimal config.
+
+For manual/server deployment (VPS, Nginx, etc.), see **[DEPLOY.md](DEPLOY.md)**.

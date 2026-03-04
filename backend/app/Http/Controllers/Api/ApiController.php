@@ -134,6 +134,9 @@ class ApiController extends Controller
         if (method_exists($driver, 'stateless')) {
             $driver = $driver->stateless();
         }
+        if ($provider === 'github' && method_exists($driver, 'scopes')) {
+            $driver = $driver->scopes(['user:email']);
+        }
         $url = $driver->redirect()->getTargetUrl();
         return $this->success(['url' => $url]);
     }
@@ -147,11 +150,24 @@ class ApiController extends Controller
             $driver = $driver->stateless();
         }
         $socialUser = $driver->user();
+        $email = $socialUser->getEmail();
+        if (empty($email) && $provider === 'github') {
+            $email = 'github-' . $socialUser->getId() . '@sso.local';
+        }
+        if (empty($email)) {
+            $frontendUrl = config('app.frontend_url');
+            $err = 'No email from ' . $provider . '. Use a different login or make your email visible in your ' . $provider . ' account.';
+            if ($frontendUrl) {
+                $redirectUrl = rtrim($frontendUrl, '/') . '/login?error=' . urlencode($err);
+                return redirect()->away($redirectUrl);
+            }
+            return $this->error($err, 400);
+        }
 
         $user = User::firstOrCreate(
-            ['email' => $socialUser->getEmail()],
+            ['email' => $email],
             [
-                'name' => $socialUser->getName() ?? $socialUser->getNickname() ?? $socialUser->getEmail(),
+                'name' => $socialUser->getName() ?? $socialUser->getNickname() ?? $email,
                 'password' => Hash::make(rand() . $socialUser->getId()),
                 'role' => User::ROLE_MEMBER,
             ]
