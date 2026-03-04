@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Auth\Middleware\Authenticate;
+use Throwable;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -21,5 +22,13 @@ return Application::configure(basePath: dirname(__DIR__))
         Authenticate::redirectUsing(fn (Request $request) => $request->is('api*') ? null : '/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (Throwable $e) {
+            if (! config('app.debug')) {
+                return response(
+                    '500: ' . $e->getMessage() . "\n\nFile: " . $e->getFile() . ':' . $e->getLine(),
+                    500,
+                    ['Content-Type' => 'text/plain; charset=UTF-8']
+                );
+            }
+        });
     })->create();
