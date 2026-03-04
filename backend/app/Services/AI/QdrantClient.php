@@ -75,9 +75,10 @@ final class QdrantClient
 
     /**
      * @param array<float> $vector
+     * @param float $minScore minimum similarity score (e.g. 0.25) to include
      * @return array<array{id: int, score: float}>
      */
-    public function search(array $vector, int $limit = 5, ?int $excludeBookId = null): array
+    public function search(array $vector, int $limit = 5, ?int $excludeBookId = null, float $minScore = 0.25): array
     {
         $body = [
             'vector' => $vector,
@@ -97,10 +98,14 @@ final class QdrantClient
         }
         $points = $res->json('result', []);
         $out = [];
-        foreach (array_slice($points, 0, $limit) as $p) {
+        foreach ($points as $p) {
             $id = $p['id'] ?? null;
-            if ($id !== null && (int) $id !== $excludeBookId) {
-                $out[] = ['id' => (int) $id, 'score' => (float) ($p['score'] ?? 0)];
+            $score = (float) ($p['score'] ?? 0);
+            if ($id !== null && (int) $id !== $excludeBookId && $score >= $minScore) {
+                $out[] = ['id' => (int) $id, 'score' => $score];
+                if (count($out) >= $limit) {
+                    break;
+                }
             }
         }
         return $out;

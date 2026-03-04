@@ -28,6 +28,9 @@ class BookEmbeddingService
         return implode('. ', $parts);
     }
 
+    /** Minimum cosine similarity to count as "similar" (only show genuinely similar books, not the whole catalog). */
+    private const MIN_SIMILARITY = 0.55;
+
     /**
      * @param array<float> $vector
      * @return array<int> book IDs
@@ -36,7 +39,7 @@ class BookEmbeddingService
     {
         if ($this->qdrant !== null) {
             $this->ensureQdrantCollection();
-            $results = $this->qdrant->search($vector, $topK, $excludeBookId);
+            $results = $this->qdrant->search($vector, $topK, $excludeBookId, self::MIN_SIMILARITY);
             return array_map(fn (array $r) => $r['id'], $results);
         }
         return $this->searchSimilarMySQL($vector, $topK, $excludeBookId);
@@ -97,7 +100,10 @@ class BookEmbeddingService
             if (! is_array($emb)) {
                 continue;
             }
-            $scores[$row->book_id] = $this->cosineSimilarity($vector, $emb);
+            $sim = $this->cosineSimilarity($vector, $emb);
+            if ($sim >= self::MIN_SIMILARITY) {
+                $scores[$row->book_id] = $sim;
+            }
         }
         arsort($scores);
         return array_slice(array_keys($scores), 0, $topK);

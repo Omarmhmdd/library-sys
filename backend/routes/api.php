@@ -18,6 +18,7 @@ Route::get('/ping', fn () => response()->json(['pong' => true]));
 // Auth (public)
 Route::post('/auth/register', [ApiController::class, 'register']);
 Route::post('/auth/login', [ApiController::class, 'login']);
+Route::get('/auth/sso-providers', [ApiController::class, 'ssoProviders']);
 Route::get('/auth/{provider}/redirect', [ApiController::class, 'redirectToProvider']);
 Route::get('/auth/{provider}/callback', [ApiController::class, 'handleProviderCallback']);
 

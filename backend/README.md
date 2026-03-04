@@ -34,8 +34,8 @@ Mini Library Management API: books CRUD, borrow/return, search, auth (Sanctum + 
    - **Optional – Qdrant** (recommended for vector search): run Qdrant (e.g. `docker run -p 6333:6333 qdrant/qdrant`) and set `QDRANT_URL=http://localhost:6333` in `.env`. If unset, vectors are stored in MySQL.
    - After adding books, index embeddings: `php artisan books:index-embeddings`.
 
-4. **Optional – SSO**
-   - For Google/GitHub login, set `GOOGLE_*` or `GITHUB_*` in `.env` and configure the OAuth app redirect to `{APP_URL}/api/auth/{provider}/callback`.
+4. **SSO (Google sign-in for all users)**
+   - Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in `.env`. **Step-by-step:** [docs/SSO_GOOGLE_SETUP.md](docs/SSO_GOOGLE_SETUP.md). Optional: GitHub via `GITHUB_*`; set `FRONTEND_URL` so the SPA receives the token after SSO.
 
 ## Run
 

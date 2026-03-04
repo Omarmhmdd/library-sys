@@ -114,9 +114,21 @@ class ApiController extends Controller
         return $this->success($user->only(['id', 'name', 'email', 'role']));
     }
 
+    public function ssoProviders(): JsonResponse
+    {
+        return $this->success([
+            'google' => ! empty(config('services.google.client_id')),
+            'github' => ! empty(config('services.github.client_id')),
+        ]);
+    }
+
     public function redirectToProvider(string $provider): JsonResponse
     {
         $this->validateProvider($provider);
+        $clientId = config("services.{$provider}.client_id");
+        if (empty($clientId)) {
+            return $this->error('SSO is not configured for ' . $provider . '. Set ' . strtoupper($provider) . '_CLIENT_ID and ' . strtoupper($provider) . '_CLIENT_SECRET in .env.', 503);
+        }
         $driver = Socialite::driver($provider);
         /** @var object $driver */
         if (method_exists($driver, 'stateless')) {
@@ -126,7 +138,7 @@ class ApiController extends Controller
         return $this->success(['url' => $url]);
     }
 
-    public function handleProviderCallback(string $provider): JsonResponse
+    public function handleProviderCallback(string $provider): JsonResponse|\Illuminate\Http\RedirectResponse
     {
         $this->validateProvider($provider);
         $driver = Socialite::driver($provider);
@@ -147,6 +159,12 @@ class ApiController extends Controller
 
         $user->tokens()->delete();
         $token = $user->createToken('auth')->plainTextToken;
+
+        $frontendUrl = config('app.frontend_url');
+        if ($frontendUrl !== null && $frontendUrl !== '') {
+            $redirectUrl = rtrim($frontendUrl, '/') . '/auth/callback#' . http_build_query(['token' => $token]);
+            return redirect()->away($redirectUrl);
+        }
 
         return $this->success([
             'user' => $user->only(['id', 'name', 'email', 'role']),
