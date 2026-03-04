@@ -21,17 +21,21 @@ function serveSpa(Request $request)
     $spaPath = public_path('spa');
     $file = $spaPath . '/' . $path;
     if ($path !== '' && $path !== '/' && file_exists($file) && is_file($file)) {
-        $ext = pathinfo($file, PATHINFO_EXTENSION);
-        $headers = isset(SPA_MIME_TYPES[$ext])
-            ? ['Content-Type' => SPA_MIME_TYPES[$ext]]
-            : [];
-        return response()->file($file, $headers);
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $mime = SPA_MIME_TYPES[$ext] ?? 'application/octet-stream';
+        // Serve with explicit Content-Type so browser accepts module scripts (BinaryFileResponse can send text/plain)
+        return response(file_get_contents($file), 200, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'public, max-age=31536000',
+        ]);
     }
     $index = $spaPath . '/index.html';
     if (! file_exists($index)) {
         return response('SPA not built. Run build and copy frontend/dist to public/spa.', 503);
     }
-    return response()->file($index, ['Content-Type' => 'text/html; charset=UTF-8']);
+    return response(file_get_contents($index), 200, [
+        'Content-Type' => 'text/html; charset=UTF-8',
+    ]);
 }
 
 Route::get('/', function (Request $request) {
