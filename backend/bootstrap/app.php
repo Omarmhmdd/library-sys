@@ -1,7 +1,12 @@
 <?php
 
+if (empty($_ENV['APP_KEY'] ?? getenv('APP_KEY'))) {
+    $key = 'base64:' . base64_encode(random_bytes(32));
+    putenv("APP_KEY={$key}");
+    $_ENV['APP_KEY'] = $key;
+}
+
 use Illuminate\Auth\Middleware\Authenticate;
-use Throwable;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,7 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         Authenticate::redirectUsing(fn (Request $request) => $request->is('api*') ? null : '/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (Throwable $e) {
+        $exceptions->render(function (\Throwable $e) {
             if (! config('app.debug')) {
                 return response(
                     '500: ' . $e->getMessage() . "\n\nFile: " . $e->getFile() . ':' . $e->getLine(),
